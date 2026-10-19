@@ -4,6 +4,8 @@ import { userFacingError } from "./errors"
 export type Locale = "pt-BR" | "en"
 export const DEFAULT_LOCALE: Locale = "pt-BR"
 export const ptBR = {
+  "O bot foi excluído, mas a limpeza dos anexos privados está pendente. O touri tentará concluir a limpeza automaticamente.":
+    "O bot foi excluído, mas a limpeza dos anexos privados está pendente. O touri tentará concluir a limpeza automaticamente.",
   "Propose 1 to 8 bots and an optional group for explicit user approval. Only the Team builder job in a direct user turn can use this tool. Never creates anything without the Create team click, even with approvals disabled. Bot drafts cannot request access: all start local, ask before file changes, with no project or extra folders, browser or computer control. Group members and optional coordinator are names from this proposal. Missing provider installation/login does not prevent creation; setup follows in each bot's settings.":
     "Propor de um a oito bots e um grupo opcional para aprovação explícita. Disponível só no Criador de times em conversa direta. Cada bot começa local, pedindo permissão para mudar arquivos, sem projeto, pastas extras, navegador ou controle do computador. Instalação e login pendentes podem ser resolvidos depois nas configurações.",
   "jobs.team-builder.name": "Criador de times",
@@ -1160,11 +1162,6 @@ export const ptBR = {
   Working: "Trabalhando",
   Bots: "Bots",
   Paused: "Pausado",
-  "Bot paused notice": "Aviso de bot pausado",
-  "Bot is paused": "{name} está pausado",
-  "Paused bots don't answer messages. Resume it to start the conversation.":
-    "Bots pausados não respondem mensagens. Retome o bot para começar a conversa.",
-  "Resume bot": "Retomar bot",
   Integrations: "Integrações",
   "Report a problem": "Reportar problema",
   "Diagnóstico incluído": "Diagnóstico incluído",
@@ -2616,14 +2613,21 @@ export const ptBR = {
   "Não foi possível consultar o armazenamento.": "Não foi possível consultar o armazenamento.",
   "Não foi possível iniciar a compactação. Aguarde a migração ou compactação em andamento e tente novamente.":
     "Não foi possível iniciar a compactação. Aguarde a migração ou compactação em andamento e tente novamente.",
+  "O provedor não detalhou o pedido": "O provedor não detalhou o pedido",
+  "Aviso de bot pausado": "Aviso de bot pausado",
+  "{name} está pausado": "{name} está pausado",
+  "Bots pausados não respondem mensagens. Retome o bot para começar a conversa.":
+    "Bots pausados não respondem mensagens. Retome o bot para começar a conversa.",
+  "Retomar bot": "Retomar bot",
 } as const
 export type TranslationKey = keyof typeof ptBR
 const englishOverrides: Partial<Record<TranslationKey, string>> = {
-  "Bot paused notice": "Paused bot notice",
-  "Bot is paused": "{name} is paused",
-  "Paused bots don't answer messages. Resume it to start the conversation.":
+  "Aviso de bot pausado": "Paused bot notice",
+  "{name} está pausado": "{name} is paused",
+  "Bots pausados não respondem mensagens. Retome o bot para começar a conversa.":
     "Paused bots don't answer messages. Resume it to start the conversation.",
-  "Resume bot": "Resume bot",
+  "Retomar bot": "Resume bot",
+  "O provedor não detalhou o pedido": "The provider gave no details for this request",
   "jobs.team-builder.name": "Team builder",
   "jobs.team-builder.description": "Discusses your work and proposes bots and a group for you to approve.",
   "jobs.team-builder.roleLine": "Turn my work into a team of bots with my approval.",
@@ -3190,6 +3194,8 @@ const englishOverrides: Partial<Record<TranslationKey, string>> = {
     "Could not delete the bot's files. Check the data folder permissions and try deleting again.",
   "Não foi possível remover o histórico e os vínculos do bot. Tente excluir novamente; se persistir, envie um relato do problema.":
     "Could not remove the bot's history and links. Try deleting again; if the problem persists, send a problem report.",
+  "O bot foi excluído, mas a limpeza dos anexos privados está pendente. O touri tentará concluir a limpeza automaticamente.":
+    "The bot was deleted, but private attachment cleanup is pending. touri will automatically try to finish the cleanup.",
   "Não foi possível excluir a rotina. Tente novamente.": "Could not delete the routine. Try again.",
   "Excluindo…": "Deleting…",
   Excluir: "Delete",

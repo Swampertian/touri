@@ -27,6 +27,9 @@ export const getStorageCollectionRetryDelay = (deferrals: number): number => {
   return Math.min(60_000, 1000 * 2 ** (deferrals - 1))
 }
 
+export const isStorageUpgradePending = (database: Database): boolean =>
+  !!database.query("SELECT 1 FROM schema_meta WHERE key = 'storage_upgrade_22' AND value <> 'done'").get()
+
 export const validDataRetentionDays = (days: unknown): days is number =>
   Number.isInteger(days) && Number(days) >= 0 && Number(days) <= 3650
 
@@ -163,6 +166,17 @@ export const compactMessageBatch = ({
     })
     .immediate()
 
+const getDeletedAttachmentIds = (value: string): string[] | null => {
+  try {
+    const ids: unknown = JSON.parse(value)
+    if (!Array.isArray(ids)) return null
+
+    return ids.filter((id): id is string => typeof id === "string")
+  } catch {
+    return null
+  }
+}
+
 export const collectUnusedOutputBlobs = async (
   database: Database,
   appData: string,
@@ -179,7 +193,10 @@ export const collectUnusedOutputBlobs = async (
 
   // Bot deletion can request collection while the backup worker is reading.
   // Keep its referenced files intact until their backup pins are committed.
-  if (database.query("SELECT 1 FROM schema_meta WHERE key = 'storage_upgrade_22' AND value <> 'done'").get()) return 0
+  if (isStorageUpgradePending(database)) {
+    onDeferred("changed")
+    return 0
+  }
   // Include replay/recovery references, so retention never deletes a file still
   // needed by an unpublished entry or a reconnecting client. User uploads stay.
   const defer = (removed: number, reason: AttachmentReferenceScanDeferredReason = "changed") => {
@@ -206,13 +223,14 @@ export const collectUnusedOutputBlobs = async (
     if (!rows.length) break
 
     // Only this pass's local accumulator changes; durable markers survive an interruption.
-    pending.push(...rows)
     rows.forEach((row) => {
-      const ids: unknown = JSON.parse(row.value_json)
-      if (Array.isArray(ids))
-        ids.forEach((id) => {
-          if (typeof id === "string") eligible.add(id)
-        })
+      const ids = getDeletedAttachmentIds(row.value_json)
+      if (!ids) return
+
+      pending.push(row)
+      ids.forEach((id) => {
+        eligible.add(id)
+      })
     })
     pendingCursor = rows.at(-1)?.key ?? pendingCursor
     if (yieldBatch) await yieldBatch()

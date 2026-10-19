@@ -1160,6 +1160,11 @@ export const ptBR = {
   Working: "Trabalhando",
   Bots: "Bots",
   Paused: "Pausado",
+  "Bot paused notice": "Aviso de bot pausado",
+  "Bot is paused": "{name} está pausado",
+  "Paused bots don't answer messages. Resume it to start the conversation.":
+    "Bots pausados não respondem mensagens. Retome o bot para começar a conversa.",
+  "Resume bot": "Retomar bot",
   Integrations: "Integrações",
   "Report a problem": "Reportar problema",
   "Diagnóstico incluído": "Diagnóstico incluído",
@@ -2614,6 +2619,11 @@ export const ptBR = {
 } as const
 export type TranslationKey = keyof typeof ptBR
 const englishOverrides: Partial<Record<TranslationKey, string>> = {
+  "Bot paused notice": "Paused bot notice",
+  "Bot is paused": "{name} is paused",
+  "Paused bots don't answer messages. Resume it to start the conversation.":
+    "Paused bots don't answer messages. Resume it to start the conversation.",
+  "Resume bot": "Resume bot",
   "jobs.team-builder.name": "Team builder",
   "jobs.team-builder.description": "Discusses your work and proposes bots and a group for you to approve.",
   "jobs.team-builder.roleLine": "Turn my work into a team of bots with my approval.",

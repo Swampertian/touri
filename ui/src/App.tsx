@@ -1185,6 +1185,9 @@ const AppContent = ({ kernel }: AppProps) => {
                               data.threadCreation?.status === "draft" ? undefined : data.threadCreation?.status
                             }
                             onRetryCreateThread={() => void actions.createThread()}
+                            onResumeBot={
+                              selectedBot ? () => actions.updateBot(selectedBot.id, { paused: false }) : undefined
+                            }
                             bot={selectedBot}
                             messages={selectedMessages}
                             runs={data.runs}

@@ -522,6 +522,8 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
     emptyState,
   )
   const creatingThread = useRef(false)
+  // Bumped when a creation settles so a draft that waited on it is requested again.
+  const [threadCreationSettled, settleThreadCreation] = useReducer((count: number) => count + 1, 0)
   const currentData = useRef(data)
   currentData.current = data
   useMachineParking(api, data.bots, enabled && !data.loading)
@@ -737,8 +739,16 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
             selectedBot?.id ?? "",
             current.selectedThreadId ?? threadsByBot.current[selectedBot?.id ?? ""],
           )
-        const threadCreation = current.threadCreation?.thread.botId === selectedBot?.id ? current.threadCreation : null
-        const selectedThreadId = threadCreation ? current.selectedThreadId : (selectedThread?.id ?? null)
+        const keptCreation = current.threadCreation?.thread.botId === selectedBot?.id ? current.threadCreation : null
+        // A bot selected at startup without conversations opens the same draft a click would.
+        const selectionLost =
+          !current.selectedThreadId || !threads.some((thread) => thread.id === current.selectedThreadId)
+        const threadCreation: WorkspaceData["threadCreation"] =
+          keptCreation ??
+          (selectedBot && !selectedThread && selectionLost
+            ? { thread: getDraftThread(selectedBot.id), status: "draft" }
+            : null)
+        const selectedThreadId = threadCreation ? threadCreation.thread.id : (selectedThread?.id ?? null)
         const notifications = current.notifications.reduce(upsertNotification, notificationsResponse.notifications)
         const pendingRequests = countPendingRequests(notifications, activityResponse.messages)
         return {
@@ -769,7 +779,12 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
           selectedBotId: selectedBot?.id ?? null,
           selectedThreadId,
           threadCreation,
-          composerKey: selectedThreadId === current.selectedThreadId ? current.composerKey : null,
+          composerKey:
+            selectedThreadId === current.selectedThreadId
+              ? current.composerKey
+              : threadCreation
+                ? crypto.randomUUID()
+                : null,
           activeProjectId: selectedBot?.projectId ?? null,
           loading: false,
           loaded: true,
@@ -1235,14 +1250,18 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
         )
       } finally {
         creatingThread.current = false
+        settleThreadCreation()
       }
     },
     [api, selectedBot, data.threadCreation, data.composerKey],
   )
+  // A bot picked without threads opens a draft; request the real thread once the bot can answer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a settled creation must retry a draft that waited on it
   useEffect(() => {
-    if (data.threadCreation?.status === "draft" && selectedBot?.id === data.threadCreation.thread.botId)
-      void startThread(data.threadCreation.thread.groupId ?? undefined)
-  }, [data.threadCreation, selectedBot?.id, startThread])
+    const draft = data.threadCreation
+    if (draft?.status !== "draft" || selectedBot?.id !== draft.thread.botId || selectedBot.paused) return
+    void startThread(draft.thread.groupId ?? undefined)
+  }, [data.threadCreation, selectedBot?.id, selectedBot?.paused, startThread, threadCreationSettled])
   const createGroupThread = useCallback((id: string) => startThread(id), [startThread])
   const createThread = useCallback(
     () => startThread(selectedThread?.groupId ?? undefined),

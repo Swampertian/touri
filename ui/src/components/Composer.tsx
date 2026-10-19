@@ -29,6 +29,8 @@ type ComposerProps = {
   locale?: Locale
   threadCreation?: Exclude<ThreadCreationStatus, "draft"> | undefined
   onRetryCreateThread?: (() => void) | undefined
+  onResumeBot?: (() => Promise<void>) | undefined
+  autoFocus?: boolean | undefined
   mentionBots?: Bot[]
   groupName?: string | undefined
   bot: Bot | null
@@ -87,6 +89,8 @@ export const Composer = ({
   locale = "pt-BR",
   threadCreation,
   onRetryCreateThread,
+  onResumeBot,
+  autoFocus = false,
   mentionBots = [],
   groupName,
   bot,
@@ -269,7 +273,25 @@ export const Composer = ({
   }
   const chooseFiles = () => fileInput.current?.click()
   const uploading = files.some((file) => file.status === "loading")
+  const paused = Boolean(bot?.paused) && !groupName
+  const [resuming, setResuming] = useState(false)
+  const resume = async () => {
+    if (!onResumeBot || resuming) return
+    setResuming(true)
+    try {
+      await onResumeBot()
+    } catch (failure) {
+      setError(userFacingError(failure))
+    } finally {
+      if (alive.current) setResuming(false)
+    }
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focus once when a fresh conversation opens
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus()
+  }, [])
   const blocked =
+    paused ||
     dictating ||
     Boolean(threadCreation) ||
     cloudUnavailable ||
@@ -413,6 +435,19 @@ export const Composer = ({
             </li>
           ))}
         </ul>
+      )}
+      {paused && (
+        <aside className="composer-notice" aria-label={t("Bot paused notice")}>
+          <div className="composer-notice-copy">
+            <strong>{t("Bot is paused", { name: bot?.name ?? "touri" })}</strong>
+            <div>{t("Paused bots don't answer messages. Resume it to start the conversation.")}</div>
+          </div>
+          {onResumeBot && (
+            <button type="button" className="button button-brand" disabled={resuming} onClick={() => void resume()}>
+              {t("Resume bot")}
+            </button>
+          )}
+        </aside>
       )}
       {threadCreation === "pending" && <p role="status">{t("Criando conversa…")}</p>}
       {threadCreation === "failed" && (

@@ -437,13 +437,13 @@ export const Composer = ({
         </ul>
       )}
       {paused && (
-        <aside className="composer-notice" aria-label={t("Bot paused notice")}>
-          <div className="composer-notice-copy">
-            <strong>{t("Bot is paused", { name: bot?.name ?? "touri" })}</strong>
-            <div>{t("Paused bots don't answer messages. Resume it to start the conversation.")}</div>
-          </div>
+        <aside className="composer-paused" aria-label={t("Bot paused notice")}>
+          <p>
+            <strong>{t("Bot is paused", { name: bot?.name ?? "touri" })}</strong>{" "}
+            {t("Paused bots don't answer messages. Resume it to start the conversation.")}
+          </p>
           {onResumeBot && (
-            <button type="button" className="button button-brand" disabled={resuming} onClick={() => void resume()}>
+            <button type="button" className="button button-quiet" disabled={resuming} onClick={() => void resume()}>
               {t("Resume bot")}
             </button>
           )}

@@ -222,7 +222,7 @@ const AppContent = ({ kernel }: AppProps) => {
   )
   const activeApi = api ?? unavailableApi
   useEffect(() => installComputerKillSwitch(activeApi, invokeCommand, setLocalNotice), [activeApi, invokeCommand])
-  const workspace = useWorkspace(activeApi, api !== null)
+  const workspace = useWorkspace(activeApi, api !== null, route.section === "bots" && route.screen === "chat")
   const { data, actions } = workspace
   const interruptedWork = useRecoveryTasks(api)
   const [recoveryOpen, setRecoveryOpen] = useState(false)
@@ -1185,6 +1185,7 @@ const AppContent = ({ kernel }: AppProps) => {
                               data.threadCreation?.status === "draft" ? undefined : data.threadCreation?.status
                             }
                             onRetryCreateThread={() => void actions.createThread()}
+                            autoFocusComposer={Boolean(data.threadCreation)}
                             onResumeBot={
                               selectedBot ? () => actions.updateBot(selectedBot.id, { paused: false }) : undefined
                             }

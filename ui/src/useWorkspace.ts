@@ -511,7 +511,8 @@ const getDraftThread = (botId: Id, groupId?: Id): Thread => {
   }
 }
 
-export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
+// chatOpen: a draft only becomes a real thread while the chat it belongs to is on screen.
+export const useWorkspace = (api: UiApi, enabled = true, chatOpen = true): Workspace => {
   const diagnosis = useDoctorReport(api, enabled)
   const [data, setData] = useReducer(
     (current: WorkspaceData, update: (current: WorkspaceData) => WorkspaceData) => {
@@ -1221,9 +1222,19 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
   const startThread = useCallback(
     async (groupId?: Id): Promise<void> => {
       if (creatingThread.current || !selectedBot) return
-      creatingThread.current = true
       const draftThread = data.threadCreation?.thread ?? getDraftThread(selectedBot.id, groupId)
       const composerKey = data.threadCreation ? data.composerKey : crypto.randomUUID()
+      // A paused bot keeps the draft; the effect below requests the thread once it resumes.
+      if (selectedBot.paused && !draftThread.groupId) {
+        setData((current) => ({
+          ...current,
+          selectedThreadId: draftThread.id,
+          threadCreation: { thread: draftThread, status: "draft" },
+          composerKey,
+        }))
+        return
+      }
+      creatingThread.current = true
       setData((current) => ({
         ...current,
         selectedThreadId: draftThread.id,
@@ -1259,9 +1270,9 @@ export const useWorkspace = (api: UiApi, enabled = true): Workspace => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a settled creation must retry a draft that waited on it
   useEffect(() => {
     const draft = data.threadCreation
-    if (draft?.status !== "draft" || selectedBot?.id !== draft.thread.botId || selectedBot.paused) return
+    if (!chatOpen || draft?.status !== "draft" || selectedBot?.id !== draft.thread.botId || selectedBot.paused) return
     void startThread(draft.thread.groupId ?? undefined)
-  }, [data.threadCreation, selectedBot?.id, selectedBot?.paused, startThread, threadCreationSettled])
+  }, [chatOpen, data.threadCreation, selectedBot?.id, selectedBot?.paused, startThread, threadCreationSettled])
   const createGroupThread = useCallback((id: string) => startThread(id), [startThread])
   const createThread = useCallback(
     () => startThread(selectedThread?.groupId ?? undefined),

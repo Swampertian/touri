@@ -65,6 +65,7 @@ type ChatPanelProps = {
   threadCreation?: Exclude<ThreadCreationStatus, "draft"> | undefined
   onRetryCreateThread?: (() => void) | undefined
   onResumeBot?: (() => Promise<void>) | undefined
+  autoFocusComposer?: boolean | undefined
   onRepeatTask?: ((draft: RoutineDraft) => void) | undefined
   group?: BotGroup | null
   groupMembers?: Bot[]
@@ -902,6 +903,7 @@ export const ChatPanel = ({
   threadCreation,
   onRetryCreateThread,
   onResumeBot,
+  autoFocusComposer = false,
   onRepeatTask,
   group = null,
   groupMembers = [],
@@ -1280,7 +1282,7 @@ export const ChatPanel = ({
         threadCreation={threadCreation}
         onRetryCreateThread={onRetryCreateThread}
         onResumeBot={onResumeBot}
-        autoFocus={Boolean(composerKey)}
+        autoFocus={autoFocusComposer}
         draftRef={draftComposerRef}
         notice={{
           bot,

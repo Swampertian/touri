@@ -119,3 +119,29 @@ it("opens a focused composer for a paused bot and creates one thread after resum
 
   expect(getThreadPosts(api)).toHaveLength(1)
 })
+
+it("keeps a new conversation for a paused bot as a draft without creating a thread", async () => {
+  const api = createMockApi()
+  const hook = renderHook(() => useWorkspace(api))
+  await waitFor(() => expect(hook.result.current.data.loading).toBe(false))
+  act(() => hook.result.current.actions.selectBot("bot-panko"))
+
+  await act(async () => hook.result.current.actions.createThread())
+
+  expect(hook.result.current.data.threadCreation?.status).toBe("draft")
+  expect(getThreadPosts(api)).toHaveLength(0)
+})
+
+it("waits for the chat to be on screen before creating the draft's thread", async () => {
+  const { api, emptyBotIds } = getApiWithEmptyBots()
+  emptyBotIds.add("bot-mark")
+  const hook = renderHook(({ chatOpen }) => useWorkspace(api, true, chatOpen), { initialProps: { chatOpen: false } })
+  await waitFor(() => expect(hook.result.current.data.loading).toBe(false))
+
+  expect(hook.result.current.data.threadCreation?.status).toBe("draft")
+  expect(getThreadPosts(api)).toHaveLength(0)
+  hook.rerender({ chatOpen: true })
+
+  await waitFor(() => expect(hook.result.current.data.threadCreation).toBeNull())
+  expect(getThreadPosts(api)).toHaveLength(1)
+})

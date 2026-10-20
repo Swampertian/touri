@@ -279,6 +279,7 @@ export const Composer = ({
   const [resuming, setResuming] = useState(false)
   const resume = async () => {
     if (!onResumeBot || resuming) return
+    setError(null)
     setResuming(true)
     try {
       await onResumeBot()

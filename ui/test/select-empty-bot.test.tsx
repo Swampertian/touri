@@ -147,3 +147,28 @@ it("waits for the chat to be on screen before creating the draft's thread", asyn
   await waitFor(() => expect(hook.result.current.data.threadCreation).toBeNull())
   expect(getThreadPosts(api)).toHaveLength(1)
 })
+
+it("clears a failed resume notice after a successful retry", async () => {
+  const user = userEvent.setup()
+  const api = createMockApi()
+  const resume = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined)
+  const request: ApiRequest = async (route, input, pathValues) => {
+    if (route === "PATCH /bots/:id" && pathValues?.id === "bot-panko") await resume()
+
+    return api.request(route, input, pathValues)
+  }
+  render(<App kernel={{ services: { api: { ...api, request } } }} />)
+  await screen.findByRole("textbox", { name: "Mensagem para mark" })
+  await user.click(screen.getByRole("button", { name: /^Panko / }))
+
+  await user.click(screen.getByRole("button", { name: "Retomar bot" }))
+
+  expect(await screen.findByRole("alert")).toBeVisible()
+  expect(screen.getByText("Panko está pausado")).toBeVisible()
+
+  await user.click(screen.getByRole("button", { name: "Retomar bot" }))
+
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
+  await waitFor(() => expect(screen.queryByText("Panko está pausado")).toBeNull())
+  expect(screen.getByRole("textbox", { name: "Mensagem para Panko" })).toHaveFocus()
+})

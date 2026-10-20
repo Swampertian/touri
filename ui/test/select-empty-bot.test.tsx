@@ -8,13 +8,16 @@ import { useWorkspace } from "../src/useWorkspace"
 
 type ThreadRequest = { botId: string; resolve: () => void }
 
-const getApiWithEmptyBots = ({ failCreate = false, holdCreate = false } = {}) => {
+type EmptyBotOptions = { failCreate?: boolean; holdCreate?: boolean; emptyBotIds?: readonly string[] }
+
+const getApiWithEmptyBots = ({ failCreate = false, holdCreate = false, emptyBotIds = [] }: EmptyBotOptions = {}) => {
   const api = createMockApi()
   const request = api.request
-  const emptyBotIds = new Set<string>()
+  const absentBotIds = new Set(emptyBotIds)
+  // Record callbacks locally so each test controls when its held requests settle.
   const held: Array<ThreadRequest> = []
   const wrapped: ApiRequest = async (route, input, pathValues) => {
-    if (route === "GET /bots/:id/threads" && emptyBotIds.has(pathValues?.id ?? "")) return { threads: [] } as never
+    if (route === "GET /bots/:id/threads" && absentBotIds.has(pathValues?.id ?? "")) return { threads: [] } as never
     if (route === "POST /threads" && failCreate) throw new Error("offline")
     if (route === "POST /threads" && holdCreate) {
       const botId = (input as { botId: string }).botId
@@ -22,13 +25,12 @@ const getApiWithEmptyBots = ({ failCreate = false, holdCreate = false } = {}) =>
     }
     return request(route, input, pathValues)
   }
-  return { api: { ...api, request: wrapped }, emptyBotIds, held }
+  return { api: { ...api, request: wrapped }, held }
 }
 
 const renderWorkspace = async (options: { failCreate?: boolean; holdCreate?: boolean } = {}) => {
-  const { api, emptyBotIds, held } = getApiWithEmptyBots(options)
+  const { api, held } = getApiWithEmptyBots({ ...options, emptyBotIds: ["bot-onb"] })
   await api.request("PATCH /bots/:id", { paused: false }, { id: "bot-panko" })
-  emptyBotIds.add("bot-onb")
   const hook = renderHook(() => useWorkspace(api))
   await waitFor(() => expect(hook.result.current.data.loading).toBe(false))
   return { api, hook, held }
@@ -135,8 +137,7 @@ it("keeps a new conversation for a paused bot as a draft without creating a thre
 })
 
 it("waits for the chat to be on screen before creating the draft's thread", async () => {
-  const { api, emptyBotIds } = getApiWithEmptyBots()
-  emptyBotIds.add("bot-mark")
+  const { api } = getApiWithEmptyBots({ emptyBotIds: ["bot-mark"] })
   const hook = renderHook(({ chatOpen }) => useWorkspace(api, true, chatOpen), { initialProps: { chatOpen: false } })
   await waitFor(() => expect(hook.result.current.data.loading).toBe(false))
 
@@ -175,7 +176,7 @@ it("clears a failed resume notice after a successful retry", async () => {
 
 it("keeps sending disabled and preserves typing while a second draft waits for creation", async () => {
   const user = userEvent.setup()
-  const { api, held } = getApiWithEmptyBots({ holdCreate: true })
+  const { api, held } = getApiWithEmptyBots({ holdCreate: true, emptyBotIds: ["bot-onb"] })
   await api.request("PATCH /bots/:id", { paused: false }, { id: "bot-panko" })
   render(<App kernel={{ services: { api } }} />)
   await screen.findByRole("textbox", { name: "Mensagem para mark" })

@@ -1,19 +1,22 @@
 import type { Database } from "bun:sqlite"
+import { opendir } from "node:fs/promises"
 import { join, relative } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 import type { Kernel, RegisteredErrorCode, RouteModule, VmRuntime } from "@touri/contracts"
 import { deletedBrowserSessionKey, removeBotSessionFile, removeBotSessionKey } from "../browser/sessionVault"
 import { createGroupStore } from "../groups/store"
+import { removeBotHomeDirectoryAsync, removePrivateFileAsync } from "../kernel/async-files"
 import {
   collectUnusedOutputBlobs,
   getStorageCollectionRetryDelay,
   isStorageUpgradePending,
 } from "../kernel/data-maintenance"
 import { errorResponse, TouriError } from "../kernel/errors"
-import { removePrivateFile, removePrivateTree } from "../kernel/files"
 import { attachmentReferences } from "../kernel/output-blobs"
 import { botReplayRows, purgeBotReplay } from "../kernel/transcript-storage"
 import { providerLoginAccount } from "./provider-login"
+
+const BOT_FILE_BATCH_SIZE = 16
 
 export const deleteBotRoute = (
   kernel: Kernel,
@@ -48,7 +51,7 @@ export const deleteBotRoute = (
           .filter((group) => group.memberIds.includes(botId))
           .map((group) => group.id)
         const attachments = await performDeletionStep("TOURI-E2014", () => deleteBotData(kernel, botId))
-        removeBotSessionFile(kernel, botId)
+        await removeBotSessionFile(kernel, botId)
         db.query(
           "INSERT INTO settings(key,value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
         ).run(deletedBrowserSessionKey(botId), "true", Date.now())
@@ -161,54 +164,62 @@ const deleteBotLogins = async (kernel: Kernel, botId: string) => {
   }
 }
 
-const deleteBotData = (kernel: Kernel, botId: string) => {
+const deleteBotData = async (kernel: Kernel, botId: string): Promise<Set<string>> => {
   const db = kernel.db as Database
-  return db
-    .transaction(() => {
-      detachBotGroupThreads(db, botId)
-      saveRemovedGroupMembers(kernel, botId)
-      createGroupStore(kernel).removeBot(botId)
-      const attachments = getBotAttachments(db, botId)
-      const files = getBotFilePaths(kernel, botId)
-      db.query(
-        "INSERT INTO settings(key,value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
-      ).run(`storage.deleted-attachments:${botId}`, JSON.stringify([...attachments]), Date.now())
-      purgeBotReplay(db, botId)
-      deleteBotRunReferences(db, botId)
-      const threads = "SELECT id FROM threads WHERE bot_id = ?"
-      db.query(`DELETE FROM group_message_links WHERE source_thread_id IN (${threads})`).run(botId)
-      db.query(`UPDATE threads SET group_thread_id = NULL WHERE group_thread_id IN (${threads}) AND bot_id != ?`).run(
-        botId,
-        botId,
-      )
-      const threadTables = ["send_journal", "messages_fts", "transcript_retention"]
-      threadTables.forEach((table) => {
-        db.query(`DELETE FROM ${table} WHERE thread_id IN (${threads})`).run(botId)
-      })
-      // Open the existing retention guard only inside this scoped transaction.
-      db.query(
-        "UPDATE transcript_maintenance SET delete_before_id = (SELECT COALESCE(MAX(id), 0) FROM transcript_entries) WHERE id = 1",
-      ).run()
-      db.query(`DELETE FROM transcript_entries WHERE thread_id IN (${threads})`).run(botId)
-      db.query("UPDATE transcript_maintenance SET delete_before_id = 0 WHERE id = 1").run()
-      db.query(
-        "DELETE FROM notification_log WHERE notification_id IN (SELECT id FROM notifications WHERE bot_id = ?)",
-      ).run(botId)
-      db.query("DELETE FROM notifications WHERE bot_id = ?").run(botId)
-      db.query("DELETE FROM tool_calls WHERE bot_id = ?").run(botId)
-      const botTables = ["bot_mcp_servers", "cloud_runs", "cloud_machines"]
-      botTables.forEach((table) => {
-        db.query(`DELETE FROM ${table} WHERE bot_id = ?`).run(botId)
-      })
-      db.query("DELETE FROM processes WHERE vm_bot_id = ?").run(botId)
-      db.query("DELETE FROM browser_tabs WHERE owner_bot_id = ?").run(botId)
-      db.query("DELETE FROM settings WHERE key = ?").run(`approval-grants:${botId}`)
-      // Cascades remove only this bot's private threads, routines and group membership.
-      db.query("DELETE FROM bots WHERE id = ?").run(botId)
-      deleteBotFiles(kernel, botId, files)
-      return attachments
+  const attachments = getBotAttachments(db, botId)
+  try {
+    const files = await getBotFilePaths(kernel, botId)
+    await removeBotFilesInBatches(kernel.paths.appData, files)
+    const homes = [
+      relative(kernel.paths.appData, kernel.paths.botsDir),
+      "provider-homes/codex",
+      "provider-homes/codex-vault",
+    ]
+    for (const path of homes) await removeBotHomeDirectoryAsync({ root: kernel.paths.appData, path, botId })
+  } catch (cause) {
+    throw new TouriError("TOURI-E2013", { cause })
+  }
+  return db.transaction(() => {
+    detachBotGroupThreads(db, botId)
+    saveRemovedGroupMembers(kernel, botId)
+    createGroupStore(kernel).removeBot(botId)
+    db.query(
+      "INSERT INTO settings(key,value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
+    ).run(`storage.deleted-attachments:${botId}`, JSON.stringify([...attachments]), Date.now())
+    purgeBotReplay(db, botId)
+    deleteBotRunReferences(db, botId)
+    const threads = "SELECT id FROM threads WHERE bot_id = ?"
+    db.query(`DELETE FROM group_message_links WHERE source_thread_id IN (${threads})`).run(botId)
+    db.query(`UPDATE threads SET group_thread_id = NULL WHERE group_thread_id IN (${threads}) AND bot_id != ?`).run(
+      botId,
+      botId,
+    )
+    const threadTables = ["send_journal", "messages_fts", "transcript_retention"]
+    threadTables.forEach((table) => {
+      db.query(`DELETE FROM ${table} WHERE thread_id IN (${threads})`).run(botId)
     })
-    .immediate()
+    // Open the existing retention guard only inside this scoped transaction.
+    db.query(
+      "UPDATE transcript_maintenance SET delete_before_id = (SELECT COALESCE(MAX(id), 0) FROM transcript_entries) WHERE id = 1",
+    ).run()
+    db.query(`DELETE FROM transcript_entries WHERE thread_id IN (${threads})`).run(botId)
+    db.query("UPDATE transcript_maintenance SET delete_before_id = 0 WHERE id = 1").run()
+    db.query(
+      "DELETE FROM notification_log WHERE notification_id IN (SELECT id FROM notifications WHERE bot_id = ?)",
+    ).run(botId)
+    db.query("DELETE FROM notifications WHERE bot_id = ?").run(botId)
+    db.query("DELETE FROM tool_calls WHERE bot_id = ?").run(botId)
+    const botTables = ["bot_mcp_servers", "cloud_runs", "cloud_machines"]
+    botTables.forEach((table) => {
+      db.query(`DELETE FROM ${table} WHERE bot_id = ?`).run(botId)
+    })
+    db.query("DELETE FROM processes WHERE vm_bot_id = ?").run(botId)
+    db.query("DELETE FROM browser_tabs WHERE owner_bot_id = ?").run(botId)
+    db.query("DELETE FROM settings WHERE key = ?").run(`approval-grants:${botId}`)
+    // Cascades remove only this bot's private threads, routines and group membership.
+    db.query("DELETE FROM bots WHERE id = ?").run(botId)
+    return attachments
+  })()
 }
 
 const saveRemovedGroupMembers = (kernel: Kernel, botId: string) => {
@@ -298,14 +309,10 @@ const getBotAttachments = (db: Database, botId: string) => {
   return attachments
 }
 
-const getBotFilePaths = (kernel: Kernel, botId: string) => {
+const getBotFilePaths = async (kernel: Kernel, botId: string) => {
   const db = kernel.db as Database
   const threads = db.query("SELECT id FROM threads WHERE bot_id=?").all(botId) as { id: string }[]
-  const configurations = threads.flatMap((thread) =>
-    ["mcp.json", "settings.json", "system.md"].map((suffix) =>
-      join(kernel.paths.runDir, "claude", `${thread.id}.${suffix}`),
-    ),
-  )
+  const configurations = await getBotConfigurationPaths(kernel.paths.runDir, threads)
   const sessions = db
     .query(
       "SELECT rollout_path FROM provider_sessions WHERE thread_id IN (SELECT id FROM threads WHERE bot_id=?) AND rollout_path IS NOT NULL",
@@ -326,18 +333,27 @@ const getBotFilePaths = (kernel: Kernel, botId: string) => {
   return [...configurations, ...privateSessions]
 }
 
-const deleteBotFiles = (kernel: Kernel, botId: string, paths: string[]) => {
-  try {
-    paths.forEach((path) => {
-      removePrivateFile({ root: kernel.paths.appData, path })
-    })
-    removeBotHome(kernel, botId)
-  } catch (cause) {
-    throw new TouriError("TOURI-E2013", { cause })
+const getBotConfigurationPaths = async (runDir: string, threads: { id: string }[]): Promise<string[]> => {
+  const directory = await opendir(join(runDir, "claude")).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null
+    throw error
+  })
+  if (!directory) return []
+
+  const names = new Set(
+    threads.flatMap((thread) => ["mcp.json", "settings.json", "system.md"].map((suffix) => `${thread.id}.${suffix}`)),
+  )
+  // Accumulate locally to avoid copying the matches on every directory entry.
+  const paths: string[] = []
+  for await (const entry of directory) {
+    if (names.has(entry.name)) paths.push(join(runDir, "claude", entry.name))
   }
+  return paths
 }
 
-const removeBotHome = (kernel: Kernel, botId: string) => {
-  if (!botId || botId === "." || botId === ".." || /[\\/\0]/.test(botId)) throw new Error("Pasta do bot inválida.")
-  removePrivateTree({ root: kernel.paths.appData, path: join(kernel.paths.botsDir, botId) })
+const removeBotFilesInBatches = async (root: string, files: string[]): Promise<void> => {
+  for (let offset = 0; offset < files.length; offset += BOT_FILE_BATCH_SIZE) {
+    const batch = files.slice(offset, offset + BOT_FILE_BATCH_SIZE)
+    await Promise.all(batch.map((path) => removePrivateFileAsync({ root, path })))
+  }
 }

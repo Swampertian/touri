@@ -226,14 +226,17 @@ export const McpScreen = ({
         }
       />
       <div className="screen-content">
-        <section className="screen-card screen-gateway-card" aria-label="Gateway local">
+        <section className="screen-card screen-gateway-card" aria-label={t("Ferramentas do touri neste computador")}>
           <div className="screen-card-heading">
             <span className="screen-provider-mark" aria-hidden="true">
               M
             </span>
             <div>
               <h2>{server?.name ?? "touri"}</h2>
-              <p>gateway local{server ? ` · ${server.version}` : ""}</p>
+              <p>
+                {t("Ferramentas do touri neste computador")}
+                {server ? ` · ${server.version}` : ""}
+              </p>
             </div>
             <span
               className={`screen-status ${status === "ready" ? "is-success" : status === "error" ? "is-error" : ""}`}
@@ -247,7 +250,7 @@ export const McpScreen = ({
         ) : status === "error" ? (
           <ScreenState
             kind="error"
-            description="As ferramentas do gateway local estão indisponíveis."
+            description={t("As ferramentas do touri estão indisponíveis.")}
             onRetry={() => setRevision((value) => value + 1)}
           />
         ) : (
@@ -290,7 +293,7 @@ export const McpScreen = ({
             )}
             <details className="screen-card screen-gateway-tools">
               <summary>
-                Ferramentas do gateway <span>{tools.length}</span>
+                {t("Ferramentas do touri")} <span>{tools.length}</span>
               </summary>
               {tools.length === 0 ? (
                 <ScreenState kind="empty" title="Nenhuma ferramenta registrada" />

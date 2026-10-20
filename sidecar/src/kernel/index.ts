@@ -7,6 +7,7 @@ import { compressBufferedResponse } from "../cli/web/compression"
 import { getHostIdentity } from "../platform/host"
 import { stopBotHomeWriter } from "../store/bot-home"
 import { touriVersion } from "../version"
+import { getFileIoStats } from "./async-files"
 import { createBackgroundTask, getMeasuredStage, yieldBackground } from "./background-task"
 import { createStorageMaintenance } from "./data-maintenance"
 import { openDatabase, SCHEMA_VERSION } from "./db"
@@ -268,6 +269,7 @@ export const createKernel = ({
           count: number
         }
       ).count,
+      fileIo: getFileIoStats(),
       sseClients: sseRequests.size,
       websocketClients: liveSockets.size,
     }),
@@ -366,12 +368,24 @@ export const createKernel = ({
         const path = body && typeof body === "object" && "path" in body ? body.path : null
         if (typeof path !== "string" || !socketEndpoint(path))
           return jsonResponse(400, { errorCode: "INVALID_ARGS" }, origin)
+        const person = session?.person
+        if (
+          person?.role === "member" &&
+          !services.use("work.authorizeSocket")?.({ personId: person.id, role: person.role, path })
+        )
+          return jsonResponse(403, { errorCode: "FORBIDDEN" }, origin)
         const value = tickets.mint(path, session)
         return value
           ? jsonResponse(201, { ticket: value }, origin)
           : jsonResponse(429, { errorCode: "RATE_LIMITED" }, origin)
       }
       if (isWebSocket) {
+        const person = session?.person
+        if (
+          person?.role === "member" &&
+          !services.use("work.authorizeSocket")?.({ personId: person.id, role: person.role, path: url.pathname })
+        )
+          return jsonResponse(404, { errorCode: "NOT_FOUND" })
         const since = desktopId || presenceBotId ? 0 : Number(url.searchParams.get("since") ?? 0)
         if (!desktopId && (!Number.isSafeInteger(since) || since < 0))
           return jsonResponse(400, { errorCode: "INVALID_CURSOR", error: "Sequência inválida" })
@@ -525,7 +539,12 @@ export const createKernel = ({
             close: (code?: number, reason?: string) => socket.close(code, reason),
           }
           eventSockets.set(socket, guarded)
-          bus.add(guarded, socket.data.since)
+          const person = socket.data.session?.person
+          const filter = person
+            ? (event: UiEvent) =>
+                services.use("work.visibleEvent")?.({ personId: person.id, role: person.role, event }) ?? false
+            : undefined
+          bus.add(guarded, socket.data.since, filter)
         }
       },
       message: (socket, data) => {

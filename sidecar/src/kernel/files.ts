@@ -34,6 +34,7 @@ const openNative = () =>
     mkdirat: { args: ["i32", "cstring", "u32"], returns: "i32" },
     renameat: { args: ["i32", "cstring", "i32", "cstring"], returns: "i32" },
     unlinkat: { args: ["i32", "cstring", "i32"], returns: "i32" },
+    symlinkat: { args: ["cstring", "i32", "cstring"], returns: "i32" },
     dup: { args: ["i32"], returns: "i32" },
     fdopendir: { args: ["i32"], returns: "ptr" },
     readdir: { args: ["ptr"], returns: "ptr" },
@@ -75,6 +76,34 @@ export const openWorkspaceDirectory = ({ root, path }: { root: string; path: str
   try {
     for (const part of path.split("/").filter(Boolean)) {
       const next = directoryAt(fd, part, false)
+      closeSync(fd)
+      fd = next
+    }
+    return fd
+  } catch (error) {
+    closeSync(fd)
+    throw error
+  }
+}
+
+/** Pins an existing workspace directory, or returns null when a path segment is absent. */
+export const openWorkspaceDirectoryIfPresent = ({ root, path }: { root: string; path: string }): number | null => {
+  if (process.platform === "win32")
+    throw new Error("Native directory-descriptor workspace access is not available on Windows")
+  if (path.includes("\0") || path.startsWith("/") || path.split("/").some((part) => part === ".."))
+    throw new TouriError("TOURI-E2000")
+  const absoluteRoot = resolve(root)
+  let fd = openSync(resolve(realpathSync(dirname(absoluteRoot)), basename(absoluteRoot)), directoryFlags)
+  try {
+    for (const part of path.split("/").filter(Boolean)) {
+      const next = openAt(fd, part, directoryFlags)
+      if (next < 0) {
+        if (errno() === 2) {
+          closeSync(fd)
+          return null
+        }
+        throw new TouriError("TOURI-E2000")
+      }
       closeSync(fd)
       fd = next
     }
@@ -429,7 +458,6 @@ export const removePrivateFile = ({ root, path }: { root: string; path: string }
   const name = parts.pop()
   if (!name) throw new TouriError("TOURI-E2000")
   withDirectory(root, parts, (fd) => {
-    validateTarget(fd, name)
     if (native().unlinkat(fd, cstring(name), 0) < 0 && errno() !== 2) throw failure()
     fsyncSync(fd)
   })
@@ -506,6 +534,28 @@ export const movePrivateFile = ({ root, from, to }: { root: string; from: string
       fsyncSync(sourceFd)
     }),
   )
+}
+
+export const replacePrivateSymlink = ({ root, path, target }: { root: string; path: string; target: string }): void => {
+  if (target.includes("\0")) throw new TouriError("TOURI-E2000")
+  if (process.platform === "win32") {
+    nativeFileOperation("replace_symlink", { root, path, target })
+    return
+  }
+  const parts = pathParts(root, path)
+  const name = parts.pop()
+  if (!name) throw new TouriError("TOURI-E2000")
+  withDirectory(root, parts, (directory) => {
+    const temporary = `.touri-${randomBytes(16).toString("hex")}.link`
+    if (native().symlinkat(cstring(target), directory, cstring(temporary)) < 0) throw failure()
+    try {
+      if (native().renameat(directory, cstring(temporary), directory, cstring(name)) < 0) throw failure()
+      fsyncSync(directory)
+    } catch (error) {
+      native().unlinkat(directory, cstring(temporary), 0)
+      throw error
+    }
+  })
 }
 
 /** SQLite retains its own WAL/transaction protocol; never rename a live database. */

@@ -300,6 +300,17 @@ jobs:
           path: ui/test-results/message-edit-target/**/*.png
           if-no-files-found: ignore
           retention-days: 7
+      - name: Check empty bot conversation and paused notice
+        working-directory: ui
+        run: bunx playwright test test/e2e/select-empty-bot.spec.ts --workers=1 --output test-results/empty-bot
+      - name: Keep synthetic empty bot evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: empty-bot
+          path: ui/test-results/empty-bot/**/*.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Check sidebar targets and UI contracts
         working-directory: ui
         env:

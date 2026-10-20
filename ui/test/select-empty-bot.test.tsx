@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, expect, it, vi } from "vitest"
 import App from "../src/App"
 import type { ApiRequest } from "../src/api/client"
@@ -94,6 +95,7 @@ it("keeps a paused bot on a draft without creating a thread until it resumes", a
 })
 
 it("opens a focused composer for a paused bot and creates one thread after resuming", async () => {
+  const user = userEvent.setup()
   const api = createMockApi()
   render(<App kernel={{ services: { api } }} />)
   await screen.findByRole("textbox", { name: "Mensagem para mark" })
@@ -106,7 +108,7 @@ it("opens a focused composer for a paused bot and creates one thread after resum
   expect(screen.getByText("Panko está pausado")).toBeVisible()
   expect(getThreadPosts(api)).toHaveLength(0)
 
-  fireEvent.click(screen.getByRole("button", { name: "Retomar bot" }))
+  await user.click(screen.getByRole("button", { name: "Retomar bot" }))
 
   await waitFor(() => expect(getThreadPosts(api)).toHaveLength(1))
   await waitFor(() => expect(screen.queryByText("Panko está pausado")).toBeNull())

@@ -282,16 +282,16 @@ export const Composer = ({
     setResuming(true)
     try {
       await onResumeBot()
+      if (alive.current) inputRef.current?.focus()
     } catch (failure) {
-      setError(userFacingError(failure))
+      if (alive.current) setError(userFacingError(failure))
     } finally {
       if (alive.current) setResuming(false)
     }
   }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: focus once when a fresh conversation opens
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus()
-  }, [])
+  }, [autoFocus, inputRef])
   const blocked =
     paused ||
     dictating ||
@@ -439,14 +439,14 @@ export const Composer = ({
         </ul>
       )}
       {paused && (
-        <aside className="composer-paused" aria-label={t("Aviso de bot pausado")}>
+        <aside className="composer-paused" aria-label={t("Aviso de bot pausado", {}, locale)}>
           <p>
-            <strong>{t("{name} está pausado", { name: bot?.name ?? "touri" })}</strong>{" "}
-            {t("Bots pausados não respondem mensagens. Retome o bot para começar a conversa.")}
+            <strong>{t("{name} está pausado", { name: bot?.name ?? "touri" }, locale)}</strong>{" "}
+            {t("Bots pausados não respondem mensagens. Retome o bot para começar a conversa.", {}, locale)}
           </p>
           {onResumeBot && (
             <button type="button" className="button button-quiet" disabled={resuming} onClick={() => void resume()}>
-              {t("Retomar bot")}
+              {t("Retomar bot", {}, locale)}
             </button>
           )}
         </aside>

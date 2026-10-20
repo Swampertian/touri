@@ -549,14 +549,16 @@ export const useWorkspace = (api: UiApi, enabled = true, chatOpen = true): Works
     for (const id of liveRuns.current.keys()) if (!activeIds.has(id)) liveRuns.current.delete(id)
   }, [data.runs])
   useEffect(() => {
-    if (!data.loading && data.selectedBotId && !data.threadCreation) {
-      if (data.selectedThreadId) threadsByBot.current[data.selectedBotId] = data.selectedThreadId
-      saveWorkspaceState({
-        botId: data.selectedBotId,
-        threadId: data.selectedThreadId,
-        threadsByBot: threadsByBot.current,
-      })
-    }
+    if (data.loading || !data.selectedBotId || data.threadCreation?.status === "pending") return
+
+    const threadId = data.threadCreation ? null : data.selectedThreadId
+    // The ref remembers visited conversations; local drafts never become history identifiers.
+    if (threadId) threadsByBot.current[data.selectedBotId] = threadId
+    saveWorkspaceState({
+      botId: data.selectedBotId,
+      threadId,
+      threadsByBot: threadsByBot.current,
+    })
   }, [data.loading, data.selectedBotId, data.selectedThreadId, data.threadCreation])
 
   const loadProject = useCallback(
@@ -1580,14 +1582,15 @@ export const useWorkspace = (api: UiApi, enabled = true, chatOpen = true): Works
       if (current.selectedBotId && current.selectedThreadId && !current.threadCreation)
         threadsByBot.current[current.selectedBotId] = current.selectedThreadId
       const fallback = lastActiveThread(current.threads, current.runs, botId, threadsByBot.current[botId])
+      const draftThread = !target && !fallback && current.loaded ? getDraftThread(botId) : null
       return {
         ...current,
         selectedBotId: botId,
-        threadCreation: null,
-        composerKey: null,
+        threadCreation: draftThread ? { thread: draftThread, status: "draft" } : null,
+        composerKey: draftThread ? crypto.randomUUID() : null,
         activeProjectId: current.bots.find((candidate) => candidate.id === botId)?.projectId ?? null,
         processes: [],
-        selectedThreadId: target?.id ?? fallback?.id ?? null,
+        selectedThreadId: target?.id ?? fallback?.id ?? draftThread?.id ?? null,
         threads: current.threads.map((candidate) =>
           candidate.id === target?.id ? { ...candidate, unread: 0 } : candidate,
         ),

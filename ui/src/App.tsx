@@ -474,9 +474,9 @@ const AppContent = ({ kernel }: AppProps) => {
   )
   useWebNavigation({
     enabled: !isTauriRuntime() && !requestedComputer,
-    ready: api !== null && data.loaded && !data.threadCreation,
+    ready: api !== null && data.loaded && data.threadCreation?.status !== "pending",
     bot: data.selectedBotId,
-    thread: data.selectedThreadId,
+    thread: data.threadCreation ? null : data.selectedThreadId,
     route,
     restore: restoreWebLocation,
     exists: webLocationExists,
@@ -1127,7 +1127,7 @@ const AppContent = ({ kernel }: AppProps) => {
               )}
               {screen === "preview" ? (
                 <PreviewScreen
-                  threadCreation={data.threadCreation?.status === "draft" ? undefined : data.threadCreation?.status}
+                  threadCreation={data.threadCreation?.status}
                   onRetryCreateThread={() => void actions.createThread()}
                   project={selectedProject}
                   processes={data.processes.filter((entry) => entry.spec.projectId === selectedProject?.id)}

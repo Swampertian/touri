@@ -5,6 +5,7 @@ import App from "../src/App"
 import type { ApiRequest } from "../src/api/client"
 import { createMockApi } from "../src/api/mock"
 import { useWorkspace } from "../src/useWorkspace"
+import { readWorkspaceState, saveWorkspaceState } from "../src/workspaceState"
 
 type ThreadRequest = { botId: string; resolve: () => void }
 
@@ -220,5 +221,37 @@ it("reuses existing history when a bot is selected before the initial index fini
 
   await waitFor(() => expect(hook.result.current.data.loaded).toBe(true))
   expect(hook.result.current.data.selectedThreadId).toBe("thread-onb")
+  expect(getThreadPosts(api)).toHaveLength(0)
+})
+
+it("remembers a paused empty bot across remounts without saving a draft as real history", async () => {
+  const api = createMockApi()
+  const first = renderHook(() => useWorkspace(api))
+  await waitFor(() => expect(first.result.current.data.loaded).toBe(true))
+
+  act(() => first.result.current.actions.selectBot("bot-panko"))
+
+  await waitFor(() => expect(readWorkspaceState().botId).toBe("bot-panko"))
+  expect(readWorkspaceState().threadId).toBeUndefined()
+  first.unmount()
+
+  const second = renderHook(() => useWorkspace(api))
+
+  await waitFor(() => expect(second.result.current.data.loaded).toBe(true))
+  expect(second.result.current.data.selectedBotId).toBe("bot-panko")
+  expect(second.result.current.data.threadCreation?.status).toBe("draft")
+  expect(getThreadPosts(api)).toHaveLength(0)
+})
+
+it("keeps the preview composer disabled while the paused conversation is only a draft", async () => {
+  const user = userEvent.setup()
+  const api = createMockApi()
+  saveWorkspaceState({ botId: "bot-panko", route: { section: "bots", screen: "preview" } })
+  render(<App kernel={{ services: { api } }} />)
+  const composer = await screen.findByRole("textbox", { name: "Mensagem para o bot" })
+
+  await user.type(composer, "Mensagem fictícia de prévia")
+
+  expect(screen.getByRole("button", { name: "Enviar", exact: true })).toBeDisabled()
   expect(getThreadPosts(api)).toHaveLength(0)
 })

@@ -319,7 +319,7 @@ export const McpScreen = ({
 }
 
 type PreviewScreenProps = {
-  threadCreation?: Exclude<ThreadCreationStatus, "draft"> | undefined
+  threadCreation?: ThreadCreationStatus | undefined
   onRetryCreateThread?: (() => void) | undefined
   project: Project | null
   processes: Array<ProcessEntry>

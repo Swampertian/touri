@@ -207,7 +207,8 @@ it("reuses existing history when a bot is selected before the initial index fini
 
     return api.request(route, input, pathValues)
   }
-  const hook = renderHook(() => useWorkspace({ ...api, request }))
+  const client = { ...api, request }
+  const hook = renderHook(() => useWorkspace(client))
   await waitFor(() => expect(hook.result.current.data.botsLoaded).toBe(true))
 
   act(() => hook.result.current.actions.selectBot("bot-onb"))

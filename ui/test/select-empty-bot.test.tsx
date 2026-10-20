@@ -198,3 +198,26 @@ it("keeps sending disabled and preserves typing while a second draft waits for c
   expect(composer).toHaveValue("Mensagem fictícia preservada")
   expect(screen.getByRole("button", { name: "Enviar", exact: true })).toBeEnabled()
 })
+
+it("reuses existing history when a bot is selected before the initial index finishes", async () => {
+  const api = createMockApi()
+  const history = Promise.withResolvers<void>()
+  const request: ApiRequest = async (route, input, pathValues) => {
+    if (route === "GET /bots/:id/threads") await history.promise
+
+    return api.request(route, input, pathValues)
+  }
+  const hook = renderHook(() => useWorkspace({ ...api, request }))
+  await waitFor(() => expect(hook.result.current.data.botsLoaded).toBe(true))
+
+  act(() => hook.result.current.actions.selectBot("bot-onb"))
+
+  expect(getThreadPosts(api)).toHaveLength(0)
+  expect(hook.result.current.data.threadCreation).toBeNull()
+
+  await act(async () => history.resolve())
+
+  await waitFor(() => expect(hook.result.current.data.loaded).toBe(true))
+  expect(hook.result.current.data.selectedThreadId).toBe("thread-onb")
+  expect(getThreadPosts(api)).toHaveLength(0)
+})

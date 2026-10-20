@@ -1155,14 +1155,14 @@ export const useWorkspace = (api: UiApi, enabled = true, chatOpen = true): Works
       const thread = lastActiveThread(current.threads, current.runs, botId, threadsByBot.current[botId])
       const bot = current.bots.find((candidate) => candidate.id === botId)
       if (!thread) {
-        const draftThread = getDraftThread(botId)
-        const composerKey = crypto.randomUUID()
+        const draftThread = current.loaded ? getDraftThread(botId) : null
+        const composerKey = draftThread ? crypto.randomUUID() : null
         return {
           ...current,
           selectedBotId: botId,
-          threadCreation: { thread: draftThread, status: "draft" },
+          threadCreation: draftThread ? { thread: draftThread, status: "draft" } : null,
           composerKey,
-          selectedThreadId: draftThread.id,
+          selectedThreadId: draftThread?.id ?? null,
           activeProjectId: bot?.projectId ?? null,
           processes: [],
         }
@@ -1272,9 +1272,19 @@ export const useWorkspace = (api: UiApi, enabled = true, chatOpen = true): Works
   // biome-ignore lint/correctness/useExhaustiveDependencies: a settled creation must retry a draft that waited on it
   useEffect(() => {
     const draft = data.threadCreation
-    if (!chatOpen || draft?.status !== "draft" || selectedBot?.id !== draft.thread.botId || selectedBot.paused) return
+    if (!enabled || !data.loaded || !chatOpen) return
+    if (draft?.status !== "draft" || selectedBot?.id !== draft.thread.botId || selectedBot.paused) return
     void startThread(draft.thread.groupId ?? undefined)
-  }, [chatOpen, data.threadCreation, selectedBot?.id, selectedBot?.paused, startThread, threadCreationSettled])
+  }, [
+    enabled,
+    data.loaded,
+    chatOpen,
+    data.threadCreation,
+    selectedBot?.id,
+    selectedBot?.paused,
+    startThread,
+    threadCreationSettled,
+  ])
   const createGroupThread = useCallback((id: string) => startThread(id), [startThread])
   const createThread = useCallback(
     () => startThread(selectedThread?.groupId ?? undefined),

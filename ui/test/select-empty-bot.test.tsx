@@ -172,3 +172,28 @@ it("clears a failed resume notice after a successful retry", async () => {
   await waitFor(() => expect(screen.queryByText("Panko está pausado")).toBeNull())
   expect(screen.getByRole("textbox", { name: "Mensagem para Panko" })).toHaveFocus()
 })
+
+it("keeps sending disabled and preserves typing while a second draft waits for creation", async () => {
+  const user = userEvent.setup()
+  const { api, held } = getApiWithEmptyBots({ holdCreate: true })
+  await api.request("PATCH /bots/:id", { paused: false }, { id: "bot-panko" })
+  render(<App kernel={{ services: { api } }} />)
+  await screen.findByRole("textbox", { name: "Mensagem para mark" })
+  await user.click(screen.getByRole("button", { name: /^onb / }))
+  await waitFor(() => expect(held).toHaveLength(1))
+
+  await user.click(screen.getByRole("button", { name: /^Panko / }))
+  const composer = await screen.findByRole("textbox", { name: "Mensagem para Panko" })
+  await user.type(composer, "Mensagem fictícia preservada")
+
+  expect(screen.getByRole("button", { name: "Enviar", exact: true })).toBeDisabled()
+  expect(screen.getByText("Criando conversa…")).toBeVisible()
+
+  await act(async () => held[0]?.resolve())
+  await waitFor(() => expect(held).toHaveLength(2))
+  await act(async () => held[1]?.resolve())
+
+  await waitFor(() => expect(screen.queryByText("Criando conversa…")).toBeNull())
+  expect(composer).toHaveValue("Mensagem fictícia preservada")
+  expect(screen.getByRole("button", { name: "Enviar", exact: true })).toBeEnabled()
+})

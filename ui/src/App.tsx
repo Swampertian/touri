@@ -1230,9 +1230,7 @@ const AppContent = ({ kernel }: AppProps) => {
                             goalRefreshRequest={goalRefreshRequest}
                             onGoalChange={notifyGoalChange}
                             composerKey={data.composerKey ?? undefined}
-                            threadCreation={
-                              data.threadCreation?.status === "draft" ? undefined : data.threadCreation?.status
-                            }
+                            threadCreation={data.threadCreation?.status}
                             onRetryCreateThread={() => void actions.createThread()}
                             autoFocusComposer={Boolean(data.threadCreation)}
                             onResumeBot={

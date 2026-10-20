@@ -79,7 +79,7 @@ import { usePhoneViewport } from "./usePhoneViewport"
 
 type ChatPanelProps = {
   composerKey?: string | undefined
-  threadCreation?: Exclude<ThreadCreationStatus, "draft"> | undefined
+  threadCreation?: ThreadCreationStatus | undefined
   onRetryCreateThread?: (() => void) | undefined
   onResumeBot?: (() => Promise<void>) | undefined
   autoFocusComposer?: boolean | undefined

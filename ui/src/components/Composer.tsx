@@ -27,7 +27,7 @@ import "./Composer.css"
 type AttachedFile = { key: string; name: string; id: Id | null; status: "loading" | "ready" | "failed" }
 type ComposerProps = {
   locale?: Locale
-  threadCreation?: Exclude<ThreadCreationStatus, "draft"> | undefined
+  threadCreation?: ThreadCreationStatus | undefined
   onRetryCreateThread?: (() => void) | undefined
   onResumeBot?: (() => Promise<void>) | undefined
   autoFocus?: boolean | undefined
@@ -293,6 +293,7 @@ export const Composer = ({
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus()
   }, [autoFocus, inputRef])
+  const isCreatingThread = threadCreation === "pending" || (threadCreation === "draft" && !paused)
   const blocked =
     paused ||
     dictating ||
@@ -452,7 +453,7 @@ export const Composer = ({
           )}
         </aside>
       )}
-      {threadCreation === "pending" && <p role="status">{t("Criando conversa…")}</p>}
+      {isCreatingThread && <p role="status">{t("Criando conversa…")}</p>}
       {threadCreation === "failed" && (
         <div role="alert">
           <p>{t("Não foi possível criar a conversa. Seu rascunho foi mantido.")}</p>
